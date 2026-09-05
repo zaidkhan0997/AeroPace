@@ -1,0 +1,119 @@
+name: CI Test Build & Validation
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-build:
+    name: Build & Validate Test Module
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip dos2unix coreutils
+
+      - name: Validate Shell Script Syntax
+        run: |
+          echo "[*] Checking shell script syntax with sh -n..."
+          sh -n service.sh
+          sh -n customize.sh
+          sh -n build.sh
+          sh -n META-INF/com/google/android/update-binary
+          echo "[+] All shell scripts passed syntax checks."
+
+      - name: Verify Line Endings and Permissions
+        run: |
+          chmod +x build.sh service.sh customize.sh
+          chmod +x META-INF/com/google/android/update-binary
+          dos2unix service.sh customize.sh module.prop system.prop update.json changelog.md README.md
+
+      - name: Compile Flashable Module
+        run: |
+          ./build.sh
+
+      - name: Verify Flashable ZIP Integrity
+        run: |
+          ZIP_FILE=$(ls out/AeroPace-*.zip | head -n 1)
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "[-] Error: Output zip file not found!"
+            exit 1
+          fi
+          echo "[*] Testing ZIP archive integrity..."
+          unzip -t "$ZIP_FILE"
+          echo "[+] ZIP archive integrity verified successfully."
+
+      - name: Extract Metadata & Generate Summary
+        id: meta
+        run: |
+          ZIP_FILE=$(basename $(ls out/AeroPace-*.zip | head -n 1))
+          SHA256=$(cat out/*.sha256 | awk '{print $1}')
+          VERSION=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d '\r\n')
+          VERSION_CODE=$(grep -E '^versionCode=' module.prop | cut -d'=' -f2 | tr -d '\r\n')
+          
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "zip_file=${ZIP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          
+          echo "### 🧪 Test Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Module Version**: \`${VERSION}\` (Code: \`${VERSION_CODE}\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Output Package**: \`${ZIP_FILE}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **SHA-256 Checksum**: \`${SHA256}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 **How to test**: Download \`${ZIP_FILE}\` directly from Releases (Pre-release) or from the Artifacts below." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Test Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AeroPace-${{ steps.meta.outputs.version }}
+          path: |
+            out/*.zip
+            out/*.sha256
+          retention-days: 14
+
+      - name: Clean Previous Test Build Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "[*] Cleaning any older test-build assets..."
+          for asset in $(gh release view test-build --repo "${{ github.repository }}" --json assets --jq '.assets[].name' 2>/dev/null || true); do
+            echo "Removing older asset: $asset"
+            gh release delete-asset test-build "$asset" --repo "${{ github.repository }}" -y 2>/dev/null || true
+          done
+
+      - name: Publish Direct-Download Pre-Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build
+          name: AeroPace ${{ steps.meta.outputs.version }} (Test Build)
+          body: |
+            ### 🧪 Automated CI Test Build
+            - **Commit**: `${{ github.sha }}`
+            - **Branch**: `${{ github.ref_name }}`
+            - **Version**: `${{ steps.meta.outputs.version }}`
+            
+            *Direct flashable ZIP download below*
+          draft: false
+          prerelease: true
+          files: |
+            out/AeroPace-*.zip
+            out/AeroPace-*.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
