@@ -18,14 +18,14 @@ AeroPace never runs permanent overclocking loops. It continuously monitors windo
 - **Auto Restoration**: When you exit or minimize the game, all governors, kernel sysctls, and GPU states automatically revert to the exact snapshots taken at boot.
 
 ### 2. 🛡️ 100% Anti-Cheat Safe (Zero Device Spoofing)
-Many gaming modules spoof `ro.product.model` or `ro.build.fingerprint` to trick games into unlocking 90/120 FPS. This frequently triggers security mismatches and 10-year bans in BGMI and PUBG Mobile.
+Many gaming modules spoof `ro.product.model` or `ro.build.fingerprint` to trick games into unlocking 90/120 FPS. This frequently triggers security mismatches and bans.
 - **AeroPace alters ZERO device fingerprints or product identifiers.**
 - All optimizations operate strictly on Linux scheduler, cpusets, GPU bus clocks, and TCP buffer dispatching.
 
 ### 3. 🧠 Safe Virtual Memory Management (No Placebo Task Killers)
 - **No aggressive OOM killing loops**: Repeatedly killing background processes thrashes the Android ZRAM and causes severe UI lag and redraws.
 - **Surgical VM sysctl tuning**: During gameplay, `/proc/sys/vm/vfs_cache_pressure` is set to `100`, `dirty_ratio` to `10`, and `dirty_background_ratio` to `5` to eliminate I/O micro-stutters.
-- **LMK Shield**: The active game PID receives `/proc/<pid>/oom_score_adj = -1000`, preventing the Android LowMemoryKiller from killing your game during intense squad fights.
+- **LMK Shield**: The active game PID receives `/proc/<pid>/oom_score_adj = -1000`, preventing the Android LowMemoryKiller from killing your game during intense team fights.
 
 ### 4. 🌡️ Active Hardware Thermal Guard
 Completely disabling thermal throttlers (`mi_thermald`, `thermal-engine`) leads to severe battery degradation and motherboard warping. AeroPace respects hardware safety:
@@ -37,12 +37,30 @@ Completely disabling thermal throttlers (`mi_thermald`, `thermal-engine`) leads 
 
 ## 🎯 Supported Game Packages
 
-| Package Name | Game Title | Target Region |
-| :--- | :--- | :--- |
-| `com.pubg.imobile` | Battlegrounds Mobile India (BGMI) | India |
-| `com.tencent.ig` | PUBG Mobile Global | Global |
-| `com.pubg.krmobile` | PUBG Mobile Korea / Japan | Korea / Japan |
-| `com.vng.pubgmobile` | PUBG Mobile VN | Vietnam |
+AeroPace automatically monitors foreground activity and boosts the following 20 premier titles spanning Battle Royale, MOBA, FPS, RPG, Sandbox, Sports, Strategy, and Arcade:
+
+| Package Name | Game Title | Genre / Category | Publisher / Studio |
+| :--- | :--- | :--- | :--- |
+| `com.pubg.imobile` | Battlegrounds Mobile India (BGMI) | Battle Royale | Krafton |
+| `com.tencent.ig` | PUBG Mobile | Battle Royale | Level Infinite / Tencent |
+| `com.pubg.krmobile` | PUBG Mobile (KR / JP) | Battle Royale | Krafton |
+| `com.vng.pubgmobile` | PUBG Mobile (VN) | Battle Royale | VNG Games |
+| `com.mobile.legends` | Mobile Legends: Bang Bang (MLBB) | MOBA | Moonton |
+| `com.dts.freefiremax` | Free Fire MAX | Battle Royale | Garena |
+| `com.dts.freefireth` | Garena Free Fire | Battle Royale | Garena |
+| `com.activision.callofduty.shooter` | Call of Duty: Mobile (CODM) | FPS / Action | Activision |
+| `com.levelinfinite.sgameGlobal` | Honor of Kings | MOBA | Level Infinite / TiMi |
+| `com.miHoYo.GenshinImpact` | Genshin Impact | Open-World Action RPG | HoYoverse / Cognosphere |
+| `com.mojang.minecraftpe` | Minecraft | Sandbox / Survival | Mojang Studios |
+| `com.roblox.client` | Roblox | Sandbox / Metaverse | Roblox Corporation |
+| `com.ea.gp.fifamobile` | EA SPORTS FC™ Mobile (FIFA Mobile) | Sports / Football | EA Sports |
+| `jp.konami.pesam` | eFootball™ | Sports / Football | Konami |
+| `com.supercell.clashofclans` | Clash of Clans | Strategy | Supercell |
+| `com.supercell.clashroyale` | Clash Royale | Real-Time Strategy | Supercell |
+| `com.miniclip.eightballpool` | 8 Ball Pool | Sports / Billiards | Miniclip |
+| `com.miniclip.carrom` | Carrom Pool: Disc Game | Board / Casual | Miniclip |
+| `com.kiloo.subwaysurf` | Subway Surfers | Endless Runner / Arcade | SYBO / Kiloo |
+| `com.king.candycrushsaga` | Candy Crush Saga | Match-3 / Casual | King |
 
 ---
 

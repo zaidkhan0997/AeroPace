@@ -30,8 +30,29 @@ done
 sleep 10
 log_info "Android boot completed. Initializing performance baseline..."
 
-# 2. Target Competitive Gaming Packages
-TARGET_PACKAGES="com.pubg.imobile com.tencent.ig com.pubg.krmobile com.vng.pubgmobile"
+# 2. Target Competitive & High-Performance Gaming Packages
+TARGET_PACKAGES="
+com.pubg.imobile
+com.tencent.ig
+com.pubg.krmobile
+com.vng.pubgmobile
+com.mobile.legends
+com.dts.freefiremax
+com.dts.freefireth
+com.activision.callofduty.shooter
+com.miHoYo.GenshinImpact
+com.roblox.client
+com.mojang.minecraftpe
+com.supercell.clashofclans
+com.supercell.clashroyale
+com.levelinfinite.sgameGlobal
+com.ea.gp.fifamobile
+jp.konami.pesam
+com.miniclip.eightballpool
+com.miniclip.carrom
+com.kiloo.subwaysurf
+com.king.candycrushsaga
+"
 
 # 3. Detect Platform Architecture
 SOC_PLATFORM="$(getprop ro.board.platform)"

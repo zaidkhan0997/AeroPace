@@ -2,7 +2,7 @@
 
 ## v1.0.0 (Initial Release)
 - Universal root support across Magisk, KernelSU, and APatch.
-- Dynamic game lifecycle: automatically engages performance mode on foreground detection of BGMI / PUBG Mobile and seamlessly reverts to boot baseline on exit.
+- Dynamic game lifecycle: automatically engages performance mode on foreground detection across 20 popular gaming titles (BGMI, PUBG Mobile variants, MLBB, Free Fire MAX, Call of Duty: Mobile, Genshin Impact, Roblox, Minecraft, Honor of Kings, EA SPORTS FC Mobile, eFootball, Clash of Clans, and more) and seamlessly reverts to boot baseline on exit.
 - Process priority boosting (`renice -n -20`, `top-app` cpusets, and LMK protection `oom_score_adj = -1000`).
 - Safe Linux Virtual Memory tuning (`vfs_cache_pressure=100`, `dirty_ratio=10`, `dirty_background_ratio=5`) with no placebo task killers.
 - Architecture-specific optimization engines:
