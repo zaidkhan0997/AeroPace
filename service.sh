@@ -6,16 +6,71 @@
 ##########################################################################################
 
 MODDIR=${0%/*}
-LOG_DIR="/data/local/tmp/aeropace"
-LOG_FILE="$LOG_DIR/daemon.log"
-mkdir -p "$LOG_DIR"
+INTERNAL_LOG_DIR="/data/local/tmp/aeropace"
+INTERNAL_LOG_FILE="$INTERNAL_LOG_DIR/daemon.log"
+USER_STORAGE_DIR="/sdcard/AeroPace"
+USER_LOG_FILE="$USER_STORAGE_DIR/aeropace.log"
+USER_TIMESTAMP_FILE="$USER_STORAGE_DIR/.log_created"
 
-log_info() {
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [AeroPace] $1"
-    echo "$msg" >> "$LOG_FILE"
-    # Keep log file bounded to 500 lines max
-    if [ -f "$LOG_FILE" ] && [ "$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
-        tail -n 250 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE"
+mkdir -p "$INTERNAL_LOG_DIR"
+
+# Core dual logging engine (Internal root fallback + User-accessible storage)
+log_write() {
+    local level="$1"
+    local msg="$2"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo '0000-00-00 00:00:00')"
+    local formatted="[$timestamp] [$level] [AeroPace] $msg"
+
+    # 1. Root-accessible internal log
+    echo "$formatted" >> "$INTERNAL_LOG_FILE" 2>/dev/null
+    if [ -f "$INTERNAL_LOG_FILE" ] && [ "$(wc -l < "$INTERNAL_LOG_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
+        tail -n 250 "$INTERNAL_LOG_FILE" > "$INTERNAL_LOG_FILE.tmp" 2>/dev/null && mv "$INTERNAL_LOG_FILE.tmp" "$INTERNAL_LOG_FILE"
+    fi
+
+    # 2. User-accessible storage log (/sdcard/AeroPace/aeropace.log)
+    if [ -d "/sdcard" ] && [ -w "/sdcard" ]; then
+        mkdir -p "$USER_STORAGE_DIR" 2>/dev/null
+        if [ -d "$USER_STORAGE_DIR" ]; then
+            # Track creation timestamp for 24-hour auto-purge
+            if [ ! -f "$USER_TIMESTAMP_FILE" ]; then
+                date +%s > "$USER_TIMESTAMP_FILE" 2>/dev/null
+            fi
+
+            echo "$formatted" >> "$USER_LOG_FILE" 2>/dev/null
+            # Bounded to 500 lines max (~50 KB) to prevent storage bloat and disk I/O lag
+            if [ -f "$USER_LOG_FILE" ] && [ "$(wc -l < "$USER_LOG_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
+                tail -n 250 "$USER_LOG_FILE" > "$USER_LOG_FILE.tmp" 2>/dev/null && mv "$USER_LOG_FILE.tmp" "$USER_LOG_FILE"
+            fi
+        fi
+    fi
+}
+
+log_info()  { log_write "INFO"  "$1"; }
+log_warn()  { log_write "WARN"  "$1"; }
+log_error() { log_write "ERROR" "$1"; }
+log_debug() { log_write "DEBUG" "$1"; }
+
+# 24-Hour Auto-Purge Engine (Zero storage bloat for gamers)
+check_and_purge_logs() {
+    if [ -d "$USER_STORAGE_DIR" ]; then
+        local now
+        now=$(date +%s 2>/dev/null || echo 0)
+        
+        if [ -f "$USER_TIMESTAMP_FILE" ]; then
+            local created_at
+            created_at=$(cat "$USER_TIMESTAMP_FILE" 2>/dev/null || echo "$now")
+            local age=$(( now - created_at ))
+
+            # 86400 seconds = 24 hours
+            if [ "$age" -ge 86400 ]; then
+                rm -f "$USER_LOG_FILE" "$USER_TIMESTAMP_FILE" 2>/dev/null
+                log_info "24-hour retention window reached. Ephemeral user log auto-purged cleanly."
+                echo "$now" > "$USER_TIMESTAMP_FILE" 2>/dev/null
+            fi
+        elif [ -f "$USER_LOG_FILE" ]; then
+            echo "$now" > "$USER_TIMESTAMP_FILE" 2>/dev/null
+        fi
     fi
 }
 
@@ -29,6 +84,7 @@ done
 # Allow core system services to stabilize
 sleep 10
 log_info "Android boot completed. Initializing performance baseline..."
+check_and_purge_logs
 
 # 2. Target Competitive & High-Performance Gaming Packages
 TARGET_PACKAGES="
@@ -104,6 +160,32 @@ fi
 
 log_info "Baseline snapshot saved successfully."
 
+# Print Developer Diagnostic Header
+print_diagnostic_header() {
+    local dev_model="$(getprop ro.product.model 2>/dev/null || echo 'Unknown')"
+    local dev_brand="$(getprop ro.product.brand 2>/dev/null || echo 'Unknown')"
+    local android_ver="$(getprop ro.build.version.release 2>/dev/null || echo 'Unknown')"
+    local android_api="$(getprop ro.build.version.sdk 2>/dev/null || echo 'Unknown')"
+    local kernel_ver="$(uname -r 2>/dev/null || echo 'Unknown')"
+    local root_mgr="Magisk"
+    if [ -n "$KSU" ] || [ -f "/data/adb/ksu/bin/busybox" ] || [ -f "/data/adb/ksud" ]; then
+        root_mgr="KernelSU"
+    elif [ -n "$APATCH" ] || [ -f "/data/adb/ap/bin/apd" ] || [ -d "/data/adb/ap" ]; then
+        root_mgr="APatch"
+    fi
+
+    log_info "==================== AeroPace Diagnostic Session ===================="
+    log_info "Module Version   : v1.0.0 (Code: 100)"
+    log_info "Device Model     : $dev_brand $dev_model (Android $android_ver, API $android_api)"
+    log_info "Kernel Release   : $kernel_ver"
+    log_info "Root Manager     : $root_mgr"
+    log_info "SoC Architecture : $ARCH_TYPE ($SOC_PLATFORM / $SOC_HARDWARE)"
+    log_info "Initial VM State : dirty_ratio=$SNAP_DIRTY_RATIO, dirty_bg=$SNAP_DIRTY_BG_RATIO, vfs_cache=$SNAP_VFS_CACHE_PRESSURE"
+    log_info "Active Safety    : Zero Device Spoofing | 24h Storage Auto-Purge"
+    log_info "====================================================================="
+}
+print_diagnostic_header
+
 # State tracking variables
 CURRENT_STATE="IDLE"
 THERMAL_THROTTLED=0
@@ -112,13 +194,15 @@ ACTIVE_GAME_PID=""
 
 # 5. Helper Functions
 
-# Helper to write to sysfs safely
+# Helper to write to sysfs safely with developer error warning
 safe_write() {
     local val="$1"
     local path="$2"
     if [ -f "$path" ]; then
         chmod 0664 "$path" 2>/dev/null
-        echo "$val" > "$path" 2>/dev/null
+        if ! echo "$val" > "$path" 2>/dev/null; then
+            log_warn "Failed to write '$val' to $path (Permission or kernel lock)"
+        fi
     fi
 }
 
@@ -147,6 +231,8 @@ get_focused_package() {
 check_thermal_status() {
     local max_soc_temp=0
     local max_bat_temp=0
+    local hot_zone_name="soc"
+    local hot_zone_type="cpu"
     
     for zone in /sys/class/thermal/thermal_zone*; do
         if [ -d "$zone" ]; then
@@ -171,6 +257,8 @@ check_thermal_status() {
             if echo "$ztype" | grep -qE "soc|cpu|tsens|ap|cluster|bcl"; then
                 if [ "$ztemp" -gt "$max_soc_temp" ]; then
                     max_soc_temp=$ztemp
+                    hot_zone_name=$(basename "$zone")
+                    hot_zone_type="$ztype"
                 fi
             fi
         fi
@@ -178,11 +266,11 @@ check_thermal_status() {
     
     # Overheat thresholds: Battery > 43°C or SoC > 75°C
     if [ "$max_bat_temp" -gt 43 ] || [ "$max_soc_temp" -gt 75 ]; then
-        echo "HOT $max_bat_temp $max_soc_temp"
+        echo "HOT $max_bat_temp $max_soc_temp $hot_zone_name $hot_zone_type"
     elif [ "$max_bat_temp" -lt 40 ] && [ "$max_soc_temp" -lt 68 ]; then
-        echo "COOL $max_bat_temp $max_soc_temp"
+        echo "COOL $max_bat_temp $max_soc_temp $hot_zone_name $hot_zone_type"
     else
-        echo "NORMAL $max_bat_temp $max_soc_temp"
+        echo "NORMAL $max_bat_temp $max_soc_temp $hot_zone_name $hot_zone_type"
     fi
 }
 
@@ -370,12 +458,21 @@ revert_to_idle() {
     ACTIVE_GAME_PID=""
     CURRENT_STATE="IDLE"
     log_info "Idle baseline restored cleanly."
+    check_and_purge_logs
 }
 
 # 8. Main Monitoring Daemon Loop
 log_info "AeroPace dynamic monitor loop active."
 
+LOOP_TICK=0
 while true; do
+    LOOP_TICK=$((LOOP_TICK + 1))
+    # Hourly periodic check (1200 ticks * 3 seconds = 3600s = 1 hour)
+    if [ "$LOOP_TICK" -ge 1200 ]; then
+        check_and_purge_logs
+        LOOP_TICK=0
+    fi
+
     FOCUSED_PKG=$(get_focused_package)
     
     # Determine if focused package is one of the target competitive games
@@ -408,9 +505,11 @@ while true; do
             THERMAL_COND=$(echo "$THERMAL_STATE" | awk '{print $1}')
             BAT_T=$(echo "$THERMAL_STATE" | awk '{print $2}')
             SOC_T=$(echo "$THERMAL_STATE" | awk '{print $3}')
+            HOT_ZONE=$(echo "$THERMAL_STATE" | awk '{print $4}')
+            HOT_TYPE=$(echo "$THERMAL_STATE" | awk '{print $5}')
             
             if [ "$THERMAL_COND" = "HOT" ] && [ "$THERMAL_THROTTLED" -eq 0 ]; then
-                log_info "THERMAL GUARD: Safety threshold breached (Bat: ${BAT_T}°C, SoC: ${SOC_T}°C). Scaling CPU governors down to schedutil..."
+                log_warn "THERMAL GUARD: Safety limit reached on ${HOT_ZONE:-zone} (${HOT_TYPE:-soc}, SoC: ${SOC_T}°C, Bat: ${BAT_T}°C). Scaling CPU governors down to schedutil..."
                 set_cpu_governors "schedutil"
                 THERMAL_THROTTLED=1
             elif [ "$THERMAL_COND" = "COOL" ] && [ "$THERMAL_THROTTLED" -eq 1 ]; then

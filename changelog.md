@@ -11,5 +11,7 @@
 - Continuous Thermal Watchdog: graceful governor step-down to prevent thermal throttling cliff drops (>43°C battery / >75°C SoC).
 - Low latency TCP network tuning (`tcp_low_latency`, `tcp_slow_start_after_idle=0`).
 - SurfaceFlinger buffer latency and touch dispatching optimizations.
-- Zero device spoofing (anti-cheat safe, no fingerprint tampering).
-- Full CI/CD GitHub Actions release pipeline.
+- Zero-root user storage logging: outputs human-readable runtime verification logs directly to `/sdcard/AeroPace/aeropace.log`.
+- Built-in 24-hour auto-purge engine: logs automatically self-destruct after 24 hours and are hard-capped to prevent storage bloat.
+- Developer diagnostic session: logs kernel version, SoC architecture, root manager, and sysfs write diagnostics.
+- Enforced 100% offline User Privacy & Data Safety Policy (zero network calls, zero tracking, zero personal data access).

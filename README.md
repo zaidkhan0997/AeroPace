@@ -5,7 +5,7 @@
 [![Anti--Cheat](https://img.shields.io/badge/Anti--Cheat-100%25%20Safe%20(Zero%20Spoofing)-brightgreen?style=for-the-badge)](https://github.com/zaidkhan0997/AeroPace)
 [![License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge)](LICENSE)
 
-**AeroPace** is an enterprise-grade, universal Android root performance module meticulously engineered for competitive mobile esports (specifically **BGMI** and **PUBG Mobile**). Built on modern Linux kernel scheduling principles, AeroPace provides hardware-level responsiveness, stable frame rendering, and safe thermal governance without placebos or account bans.
+**AeroPace** is an enterprise-grade, universal Android root performance module meticulously engineered for competitive mobile esports and demanding gaming titles (including **BGMI**, **PUBG Mobile**, **Mobile Legends**, **Free Fire**, **Call of Duty: Mobile**, **Genshin Impact**, and more). Built on modern Linux kernel scheduling principles, AeroPace provides hardware-level responsiveness, stable frame rendering, and safe thermal governance without placebos or account bans.
 
 ---
 
@@ -114,8 +114,23 @@ AeroPace natively implements the modern `updateJson` specification in `module.pr
 
 ## 🛠️ Verification & Diagnostic Logs
 
-To inspect runtime behavior and ensure the daemon is actively managing your games, run via Termux or ADB shell:
+### 📱 For Mobile Gamers (Zero Root Skills Needed)
+AeroPace automatically outputs a human-readable log directly in your device's standard internal storage:
+- **Log Location**: Open any File Manager (Google Files, ZArchiver, MiXplorer, etc.) -> Open the **`AeroPace`** folder -> View **`aeropace.log`**.
+- **What you can verify**:
+  - Exact time your game was launched and detected.
+  - Confirmation of CPU governor escalation (`performance`) and Adreno/Mali GPU clock locking.
+  - Active LowMemoryKiller (LMK) protection applied to your game process (`oom_score_adj = -1000`).
+  - Clean restoration back to stock factory baseline when you minimize or exit the game.
+- **Auto-Cleaning / 24-Hour Purge**: To preserve storage and prevent clutter, the log file **automatically self-destructs after 24 hours** and is hard-capped at 500 lines (~50 KB max).
 
+### 💻 For Developers & Bug Reporting (GitHub Issues)
+When reporting bugs, thermal throttling step-downs, or kernel node incompatibilities, attach `/sdcard/AeroPace/aeropace.log` to your GitHub Issue. The log contains:
+- **System Environment Header**: Android API, device model, exact kernel version (`uname -r`), detected SoC architecture, and root manager.
+- **Kernel Node Warnings**: Any sysfs paths locked or missing on specific OEM kernels.
+- **Thermal Sensor Diagnostics**: The exact `thermal_zone` and sensor type triggered during thermal guard events.
+
+Advanced terminal monitoring (via Termux or ADB):
 ```bash
 # View live AeroPace daemon activity
 su -c tail -f /data/local/tmp/aeropace/daemon.log
@@ -123,6 +138,26 @@ su -c tail -f /data/local/tmp/aeropace/daemon.log
 # Check stored boot snapshot parameters
 su -c ls -l /data/local/tmp/aeropace/snapshot/
 ```
+
+---
+
+## 🔒 User Privacy, Security & Data Safety Policy
+
+AeroPace is engineered with an uncompromising commitment to gamer privacy and device integrity:
+
+1. **100% Offline Architecture**:
+   - AeroPace operates strictly through local Linux kernel and scheduler interfaces.
+   - It contains **zero network sockets**, **zero telemetry trackers**, **zero analytics**, and **never connects to remote servers**.
+2. **Zero Access to Personal Files or Accounts**:
+   - AeroPace does not access, read, or scan your personal photos, media, messages, contacts, credentials, clipboard, or storage directories.
+   - It strictly operates inside `/data/local/tmp/aeropace/` and creates its own temporary `/sdcard/AeroPace/` folder purely for the ephemeral log.
+3. **Selective Gaming-Only Monitoring**:
+   - The daemon's window focus detector strictly checks whether the foreground window matches one of the 20 explicitly supported game package IDs.
+   - All other applications—including banking apps, messaging apps, browsers, and system tools—are completely ignored.
+4. **Ephemeral Storage Lifecycle**:
+   - Diagnostic logs automatically self-destruct after 24 hours to prevent lingering data and storage waste.
+5. **Transparent Open Source**:
+   - Every script in AeroPace is written in plain, human-readable shell code (`service.sh`, `customize.sh`). There are no pre-compiled closed-source binary blobs.
 
 ---
 
