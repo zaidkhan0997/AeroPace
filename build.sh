@@ -26,11 +26,42 @@ if [ -z "$VERSION" ]; then
     VERSION="v1.0.0"
 fi
 
-ZIP_NAME="AeroPace-${VERSION}.zip"
+# Support optional tag suffix (e.g., ./build.sh beta or BUILD_SUFFIX="-beta")
+SUFFIX=""
+if [ $# -gt 0 ]; then
+    case "$1" in
+        beta|--beta|-beta) SUFFIX="-beta" ;;
+        rc*|--rc*|-rc*) SUFFIX="-$(echo "$1" | sed -e 's/^--*//')" ;;
+        *) SUFFIX="$1" ;;
+    esac
+elif [ -n "${BUILD_SUFFIX:-}" ]; then
+    SUFFIX="${BUILD_SUFFIX}"
+fi
+
+if [ -n "$SUFFIX" ] && [ "${SUFFIX#"-"}" = "$SUFFIX" ]; then
+    SUFFIX="-$SUFFIX"
+fi
+
+DISPLAY_VERSION="${VERSION}${SUFFIX}"
+ZIP_NAME="AeroPace-${DISPLAY_VERSION}.zip"
 OUT_DIR="$SCRIPT_DIR/out"
 
-echo "[*] Preparing build for AeroPace $VERSION (Code: ${VERSION_CODE:-unknown})"
+echo "[*] Preparing build for AeroPace $DISPLAY_VERSION (Code: ${VERSION_CODE:-unknown})"
 mkdir -p "$OUT_DIR"
+
+# If suffix is provided, temporarily reflect it in module.prop for the flashable zip
+ORIG_PROP=""
+if [ -n "$SUFFIX" ]; then
+    ORIG_PROP="$(cat module.prop)"
+    sed -i "s/^version=.*/version=${DISPLAY_VERSION}/" module.prop
+fi
+
+cleanup_prop() {
+    if [ -n "$ORIG_PROP" ]; then
+        echo "$ORIG_PROP" > "$SCRIPT_DIR/module.prop"
+    fi
+}
+trap cleanup_prop EXIT INT TERM
 
 # Enforce proper execution permissions
 echo "[*] Normalizing file permissions..."

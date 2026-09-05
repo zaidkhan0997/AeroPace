@@ -1,0 +1,65 @@
+name: Build & Release AeroPace Module
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip dos2unix coreutils
+
+      - name: Verify Line Endings and Permissions
+        run: |
+          chmod +x build.sh service.sh customize.sh
+          chmod +x META-INF/com/google/android/update-binary
+          dos2unix service.sh customize.sh module.prop system.prop update.json
+
+      - name: Execute Module Packaging
+        run: |
+          ./build.sh
+
+      - name: Extract Release Notes & Metadata
+        id: meta
+        run: |
+          VERSION=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d '\r\n')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          
+          # Extract changelog section if available, otherwise generate default
+          if [ -f "changelog.md" ]; then
+            CHANGELOG_CONTENT=$(cat changelog.md)
+          else
+            CHANGELOG_CONTENT="Automated release for version ${VERSION}"
+          fi
+          
+          # Save changelog for release body
+          echo "$CHANGELOG_CONTENT" > release_notes.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: AeroPace Performance Engine ${{ steps.meta.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            out/AeroPace-*.zip
+            out/AeroPace-*.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
