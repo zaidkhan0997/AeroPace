@@ -1,0 +1,7 @@
+id=aeropace
+name=AeroPace Performance Engine
+version=v1.0.0
+versionCode=100
+author=Zaid Khan
+description=Enterprise-grade dynamic gaming performance engine for Qualcomm Snapdragon & MediaTek Dimensity/Helio architectures. Anti-cheat safe, zero spoofing, dynamic state lifecycle with thermal watchdog.
+updateJson=https://raw.githubusercontent.com/zaidkhan0997/AeroPace/main/update.json

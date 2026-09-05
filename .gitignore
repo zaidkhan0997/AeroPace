@@ -1,0 +1,12 @@
+# AeroPace Build Artifacts
+out/
+*.zip
+*.sha256
+
+# Temporary & Swap Files
+*.tmp
+*.bak
+
+# OS Metadata
+.DS_Store
+Thumbs.db

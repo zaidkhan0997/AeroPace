@@ -1,0 +1,25 @@
+# AeroPace Performance Engine - System Properties
+# Universal Display Latency & Touch Responsiveness Tuning
+# ZERO DEVICE SPOOFING: No fingerprint, product, or model properties are altered.
+
+# SurfaceFlinger Buffer & Composition Latency Tuning
+debug.sf.latch_unsignaled=1
+debug.sf.enable_gl_backpressure=0
+debug.sf.disable_backpressure=1
+debug.sf.early_phase_offset_ns=500000
+debug.sf.early_app_phase_offset_ns=500000
+debug.sf.early_gl_phase_offset_ns=3000000
+debug.sf.early_gl_app_phase_offset_ns=15000000
+debug.sf.high_fps_early_phase_offset_ns=500000
+debug.sf.high_fps_early_gl_phase_offset_ns=3000000
+debug.sf.high_fps_late_app_phase_offset_ns=1000000
+debug.sf.high_fps_late_sf_phase_offset_ns=1000000
+
+# Touch & Window Manager Responsiveness
+windowsmgr.max_events_per_sec=240
+view.touch_slop=2
+view.scroll_friction=0.008
+
+# HWUI & RenderThread Graphics Acceleration
+renderthread.skia.reduceopstasksplitting=true
+debug.hwui.use_buffer_age=true
