@@ -77,37 +77,82 @@ jobs:
             exit 0
           fi
 
-          ZIP_FILE=$(ls out/AeroPace-*.zip 2>/dev/null | head -n 1)
-          CAPTION=$(cat <<EOF
-          ⚡ <b>AeroPace Performance Engine ${VERSION} Released!</b> ⚡
+          # 1. Configure 5 interactive button tabs (including Full Changelog)
+          REPLY_MARKUP=$(printf "{\"inline_keyboard\":[[{\"text\":\"📦 GitHub Release\",\"url\":\"https://github.com/%s/releases/tag/%s\"},{\"text\":\"📖 Read README\",\"url\":\"https://github.com/%s#readme\"}],[{\"text\":\"📢 Channel\",\"url\":\"https://t.me/AeroPaceCH\"},{\"text\":\"👥 Support Group\",\"url\":\"https://t.me/AeroPace\"}],[{\"text\":\"📋 Full Changelog\",\"url\":\"https://github.com/%s/blob/%s/changelog.md\"}]]}" \
+            "${REPO}" "${RELEASE_TAG}" "${REPO}" "${REPO}" "${RELEASE_TAG}")
 
-          A new official release is available with dynamic gaming optimizations.
+          # 2. Extract changelog highlights
+          CHANGELOG_HIGHLIGHTS=""
+          if [ -f "changelog.md" ]; then
+            CHANGELOG_HIGHLIGHTS=$(python3 -c "
+          import sys, re, html
+          version = sys.argv[1].lstrip('v')
+          try:
+              with open('changelog.md', 'r') as f:
+                  content = f.read()
+              pattern = rf'##\s+v?{re.escape(version)}[^\n]*\n(.*?)(?=\n##|\Z)'
+              match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+              section = match.group(1).strip() if match else content.strip()
+              lines = []
+              for line in section.splitlines():
+                  line = line.strip()
+                  if not line or not line.startswith(('-', '*')):
+                      continue
+                  text = line.lstrip('-* \t')
+                  if len(text) > 100:
+                      text = text[:97].rsplit(' ', 1)[0] + '...'
+                  lines.append('• ' + html.escape(text))
+              result = []
+              total_len = 0
+              for line in lines:
+                  if total_len + len(line) > 520 or len(result) >= 5:
+                      result.append('• <i>...and more (tap Full Changelog below)</i>')
+                      break
+                  result.append(line)
+                  total_len += len(line) + 1
+              print('\n'.join(result))
+          except Exception:
+              pass
+          " "${VERSION}")
+          fi
 
-          🔗 <b>Release Link:</b> https://github.com/${REPO}/releases/tag/${RELEASE_TAG}
-          👥 <b>Support Group:</b> @AeroPace
-          📢 <b>Channel:</b> @AeroPaceCH
-          EOF
-          )
+          # 3. Assemble caption with warning note and highlights
+          if [ -n "$CHANGELOG_HIGHLIGHTS" ]; then
+            CAPTION=$(printf "%b\n" \
+              "⚡ <b>AeroPace Performance Engine ${VERSION} Released!</b> ⚡\n" \
+              "⚠️ <b>Important:</b> Please read <a href=\"https://github.com/${REPO}#readme\">README.md</a> before flashing!\n" \
+              "📋 <b>Changelog Highlights:</b>" \
+              "${CHANGELOG_HIGHLIGHTS}")
+          else
+            CAPTION=$(printf "%b\n" \
+              "⚡ <b>AeroPace Performance Engine ${VERSION} Released!</b> ⚡\n" \
+              "⚠️ <b>Important:</b> Please read <a href=\"https://github.com/${REPO}#readme\">README.md</a> before flashing!")
+          fi
 
+          # 4. Upload flashable zip with button tabs
+          ZIP_FILE=$(ls out/AeroPace-*.zip 2>/dev/null | head -n 1 || true)
           if [ -n "$ZIP_FILE" ] && [ -f "$ZIP_FILE" ]; then
             echo "Uploading $ZIP_FILE to Telegram channel ${TELEGRAM_CHAT_ID}..."
             RESPONSE=$(curl -s -S -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F document=@"${ZIP_FILE}" \
-              -F caption="${CAPTION}" \
-              -F parse_mode="HTML")
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "document=@${ZIP_FILE}" \
+              --form-string "caption=${CAPTION}" \
+              --form-string "parse_mode=HTML" \
+              --form-string "reply_markup=${REPLY_MARKUP}" || true)
           else
             echo "No flashable zip found in out/. Sending message without attachment..."
             RESPONSE=$(curl -s -S -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F text="${CAPTION}" \
-              -F parse_mode="HTML")
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form-string "text=${CAPTION}" \
+              --form-string "parse_mode=HTML" \
+              --form-string "reply_markup=${REPLY_MARKUP}" || true)
           fi
 
           echo "Telegram API Response: $RESPONSE"
-          if echo "$RESPONSE" | grep -Eq '"ok":[[:space:]]*true'; then
+          if [[ "$RESPONSE" =~ \"ok\":[[:space:]]*true ]]; then
             echo "Telegram broadcast successful!"
           else
             echo "::warning ::Telegram broadcast failed. Check API response above."
           fi
+
 
