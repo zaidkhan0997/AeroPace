@@ -4,6 +4,8 @@
 [![Architecture](https://img.shields.io/badge/SoC-Qualcomm%20%7C%20MediaTek-blue?style=for-the-badge&logo=qualcomm)](https://github.com/zaidkhan0997/AeroPace)
 [![Anti--Cheat](https://img.shields.io/badge/Anti--Cheat-100%25%20Safe%20(Zero%20Spoofing)-brightgreen?style=for-the-badge)](https://github.com/zaidkhan0997/AeroPace)
 [![License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge)](LICENSE)
+[![Telegram Channel](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/AeroPaceCH)
+[![Telegram Support](https://img.shields.io/badge/Telegram-Support%20Group-blue?style=for-the-badge&logo=telegram)](https://t.me/AeroPace)
 
 **AeroPace** is an enterprise-grade, universal Android root performance module meticulously engineered for competitive mobile esports and demanding gaming titles (including **BGMI**, **PUBG Mobile**, **Mobile Legends**, **Free Fire**, **Call of Duty: Mobile**, **Genshin Impact**, and more). Built on modern Linux kernel scheduling principles, AeroPace provides hardware-level responsiveness, stable frame rendering, and safe thermal governance without placebos or account bans.
 
@@ -186,3 +188,13 @@ chmod +x build.sh
 ```
 
 Compiled flashable ZIPs and SHA-256 hashes will be generated in `out/`.
+
+---
+
+## 💬 Community & Support
+
+Stay connected for release announcements, module updates, and live community troubleshooting:
+
+- 📢 **Telegram Updates Channel**: [@AeroPaceCH](https://t.me/AeroPaceCH)
+- 👥 **Telegram Support Group**: [@AeroPace](https://t.me/AeroPace)
+
