@@ -63,3 +63,51 @@ jobs:
             out/AeroPace-*.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Release Announcement to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::notice ::Telegram secrets (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID) are not configured. Skipping Telegram announcement."
+            exit 0
+          fi
+
+          ZIP_FILE=$(ls out/AeroPace-*.zip 2>/dev/null | head -n 1)
+          CAPTION=$(cat <<EOF
+          ⚡ <b>AeroPace Performance Engine ${VERSION} Released!</b> ⚡
+
+          A new official release is available with dynamic gaming optimizations.
+
+          🔗 <b>Release Link:</b> https://github.com/${REPO}/releases/tag/${RELEASE_TAG}
+          👥 <b>Support Group:</b> @AeroPace
+          📢 <b>Channel:</b> @AeroPaceCH
+          EOF
+          )
+
+          if [ -n "$ZIP_FILE" ] && [ -f "$ZIP_FILE" ]; then
+            echo "Uploading $ZIP_FILE to Telegram channel ${TELEGRAM_CHAT_ID}..."
+            RESPONSE=$(curl -s -S -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"${ZIP_FILE}" \
+              -F caption="${CAPTION}" \
+              -F parse_mode="HTML")
+          else
+            echo "No flashable zip found in out/. Sending message without attachment..."
+            RESPONSE=$(curl -s -S -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F text="${CAPTION}" \
+              -F parse_mode="HTML")
+          fi
+
+          echo "Telegram API Response: $RESPONSE"
+          if echo "$RESPONSE" | grep -Eq '"ok":[[:space:]]*true'; then
+            echo "Telegram broadcast successful!"
+          else
+            echo "::warning ::Telegram broadcast failed. Check API response above."
+          fi
+
