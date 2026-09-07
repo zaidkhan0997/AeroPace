@@ -117,24 +117,29 @@ AeroPace natively implements the modern `updateJson` specification in `module.pr
 ## 🛠️ Verification & Diagnostic Logs
 
 ### 📱 For Mobile Gamers (Zero Root Skills Needed)
-AeroPace automatically outputs a human-readable log directly in your device's standard internal storage:
-- **Log Location**: Open any File Manager (Google Files, ZArchiver, MiXplorer, etc.) -> Open the **`AeroPace`** folder -> View **`aeropace.log`**.
-- **What you can verify**:
-  - Exact time your game was launched and detected.
-  - Confirmation of CPU governor escalation (`performance`) and Adreno/Mali GPU clock locking.
-  - Active LowMemoryKiller (LMK) protection applied to your game process (`oom_score_adj = -1000`).
-  - Clean restoration back to stock factory baseline when you minimize or exit the game.
-- **Auto-Cleaning / 24-Hour Purge**: To preserve storage and prevent clutter, the log file **automatically self-destructs after 24 hours** and is hard-capped at 500 lines (~50 KB max).
+AeroPace automatically outputs human-readable logs and live telemetry directly in your device's internal storage (`/sdcard/AeroPace` or `/sdcard/aeropace`):
+- **Live Event Log (`/sdcard/AeroPace/aeropace.log`)**:
+  - **Immediate App Switch Detection**: Instantly logs when any app or game window enters or leaves the foreground.
+  - **Live Gaming Telemetry**: Every ~9 seconds during active gameplay, logs real-time Battery/SoC temperatures, CPU governors & clock frequencies, GPU clocks, and LMK protection status (`oom_score_adj = -1000`).
+  - **Idle Heartbeat**: Every 30 seconds when not gaming, logs ambient device telemetry to confirm the daemon is alive.
+  - **Thermal Watchdog Events**: Immediate logging if hardware thermal limits are reached or restored.
+  - **Storage Auto-Purge**: Hard-capped at 1,500 lines (~150 KB max) and automatically self-destructs after 24 hours to prevent storage bloat.
+- **Instant Real-Time Status File (`/sdcard/AeroPace/live_monitor.status`)**:
+  - A clean, one-page status snapshot atomically refreshed every 3 seconds.
+  - Open anytime in any text viewer or file manager to see the exact current daemon state, focused package, thermal conditions, and hardware clock frequencies at that second.
 
 ### 💻 For Developers & Bug Reporting (GitHub Issues)
-When reporting bugs, thermal throttling step-downs, or kernel node incompatibilities, attach `/sdcard/AeroPace/aeropace.log` to your GitHub Issue. The log contains:
-- **System Environment Header**: Android API, device model, exact kernel version (`uname -r`), detected SoC architecture, and root manager.
-- **Kernel Node Warnings**: Any sysfs paths locked or missing on specific OEM kernels.
-- **Thermal Sensor Diagnostics**: The exact `thermal_zone` and sensor type triggered during thermal guard events.
+When reporting bugs, thermal throttling step-downs, or kernel node incompatibilities, attach `/sdcard/AeroPace/aeropace.log` to your GitHub Issue.
 
-Advanced terminal monitoring (via Termux or ADB):
+Advanced live monitoring (via Termux or ADB):
 ```bash
-# View live AeroPace daemon activity
+# View live real-time status snapshot (refreshes every 3 seconds)
+cat /sdcard/AeroPace/live_monitor.status
+
+# Stream live daemon telemetry in real time
+tail -f /sdcard/AeroPace/aeropace.log
+
+# Stream root internal daemon log
 su -c tail -f /data/local/tmp/aeropace/daemon.log
 
 # Check stored boot snapshot parameters

@@ -11,6 +11,7 @@ INTERNAL_LOG_FILE="$INTERNAL_LOG_DIR/daemon.log"
 USER_STORAGE_DIR="/sdcard/AeroPace"
 USER_LOG_FILE="$USER_STORAGE_DIR/aeropace.log"
 USER_TIMESTAMP_FILE="$USER_STORAGE_DIR/.log_created"
+USER_STATUS_FILE="$USER_STORAGE_DIR/live_monitor.status"
 
 mkdir -p "$INTERNAL_LOG_DIR"
 
@@ -24,13 +25,15 @@ log_write() {
 
     # 1. Root-accessible internal log
     echo "$formatted" >> "$INTERNAL_LOG_FILE" 2>/dev/null
-    if [ -f "$INTERNAL_LOG_FILE" ] && [ "$(wc -l < "$INTERNAL_LOG_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
-        tail -n 250 "$INTERNAL_LOG_FILE" > "$INTERNAL_LOG_FILE.tmp" 2>/dev/null && mv "$INTERNAL_LOG_FILE.tmp" "$INTERNAL_LOG_FILE"
+    if [ -f "$INTERNAL_LOG_FILE" ] && [ "$(wc -l < "$INTERNAL_LOG_FILE" 2>/dev/null || echo 0)" -gt 1500 ]; then
+        tail -n 750 "$INTERNAL_LOG_FILE" > "$INTERNAL_LOG_FILE.tmp" 2>/dev/null && mv "$INTERNAL_LOG_FILE.tmp" "$INTERNAL_LOG_FILE"
     fi
 
     # 2. User-accessible storage log (/sdcard/AeroPace/aeropace.log)
     if [ -d "/sdcard" ] && [ -w "/sdcard" ]; then
         mkdir -p "$USER_STORAGE_DIR" 2>/dev/null
+        # Ensure /sdcard/aeropace compatibility alias
+        [ ! -e "/sdcard/aeropace" ] && ln -s "$USER_STORAGE_DIR" /sdcard/aeropace 2>/dev/null
         if [ -d "$USER_STORAGE_DIR" ]; then
             # Track creation timestamp for 24-hour auto-purge
             if [ ! -f "$USER_TIMESTAMP_FILE" ]; then
@@ -38,9 +41,9 @@ log_write() {
             fi
 
             echo "$formatted" >> "$USER_LOG_FILE" 2>/dev/null
-            # Bounded to 500 lines max (~50 KB) to prevent storage bloat and disk I/O lag
-            if [ -f "$USER_LOG_FILE" ] && [ "$(wc -l < "$USER_LOG_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
-                tail -n 250 "$USER_LOG_FILE" > "$USER_LOG_FILE.tmp" 2>/dev/null && mv "$USER_LOG_FILE.tmp" "$USER_LOG_FILE"
+            # Bounded to 1500 lines max (~150 KB) to retain diagnostic history without storage bloat
+            if [ -f "$USER_LOG_FILE" ] && [ "$(wc -l < "$USER_LOG_FILE" 2>/dev/null || echo 0)" -gt 1500 ]; then
+                tail -n 750 "$USER_LOG_FILE" > "$USER_LOG_FILE.tmp" 2>/dev/null && mv "$USER_LOG_FILE.tmp" "$USER_LOG_FILE"
             fi
         fi
     fi
@@ -64,7 +67,7 @@ check_and_purge_logs() {
 
             # 86400 seconds = 24 hours
             if [ "$age" -ge 86400 ]; then
-                rm -f "$USER_LOG_FILE" "$USER_TIMESTAMP_FILE" 2>/dev/null
+                rm -f "$USER_LOG_FILE" "$USER_TIMESTAMP_FILE" "$USER_STATUS_FILE" 2>/dev/null
                 log_info "24-hour retention window reached. Ephemeral user log auto-purged cleanly."
                 echo "$now" > "$USER_TIMESTAMP_FILE" 2>/dev/null
             fi
@@ -124,7 +127,7 @@ fi
 log_info "Detected Hardware Architecture: $ARCH_TYPE"
 
 # 4. Capture Boot Baseline Snapshots for 100% Clean Restore
-SNAPSHOT_DIR="$LOG_DIR/snapshot"
+SNAPSHOT_DIR="$INTERNAL_LOG_DIR/snapshot"
 mkdir -p "$SNAPSHOT_DIR"
 
 # Snapshot VM parameters
@@ -175,7 +178,7 @@ print_diagnostic_header() {
     fi
 
     log_info "==================== AeroPace Diagnostic Session ===================="
-    log_info "Module Version   : v1.0.0 (Code: 100)"
+    log_info "Module Version   : v1.1.0 (Code: 110)"
     log_info "Device Model     : $dev_brand $dev_model (Android $android_ver, API $android_api)"
     log_info "Kernel Release   : $kernel_ver"
     log_info "Root Manager     : $root_mgr"
@@ -206,24 +209,181 @@ safe_write() {
     fi
 }
 
-# Function to detect currently focused package across Android 11 to 15
+# Helper to extract clean Android package name from dumpsys/cmd activity lines
+extract_pkg() {
+    local line="$1"
+    local p=""
+    p=$(echo "$line" | grep -oE '[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+/[^ }]*' | head -n 1 | cut -d'/' -f1)
+    if [ -z "$p" ]; then
+        p=$(echo "$line" | awk -F'/' '{print $1}' | awk '{print $NF}' | tr -cd 'a-zA-Z0-9_.')
+    fi
+    case "$p" in
+        *.*) echo "$p" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Function to detect currently focused package across Android 11 to 17
 get_focused_package() {
     local pkg=""
+    local line=""
     
-    # Method 1: dumpsys window (Fastest & most accurate across Android 11-14)
-    pkg=$(dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp|mFocusedWindow' | head -n 1 | sed -n 's/.*\([a-zA-Z0-9_.]*\)\/\([a-zA-Z0-9_.]*\).*/\1/p')
+    # Method 1: cmd activity (Fastest & direct on Android 12 to 17)
+    line=$(cmd activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity' | head -n 1)
+    if [ -n "$line" ]; then
+        pkg=$(extract_pkg "$line")
+    fi
     
-    # Method 2: cmd activity (Android 12-15 fallback)
+    # Method 2: dumpsys window (High accuracy across Android 11 to 17)
     if [ -z "$pkg" ]; then
-        pkg=$(cmd activity activities 2>/dev/null | grep -E 'ResumedActivity|mResumedActivity' | head -n 1 | sed -n 's/.*\([a-zA-Z0-9_.]*\)\/\([a-zA-Z0-9_.]*\).*/\1/p')
+        line=$(dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp|mFocusedWindow' | head -n 1)
+        if [ -n "$line" ]; then
+            pkg=$(extract_pkg "$line")
+        fi
     fi
     
     # Method 3: dumpsys activity fallback
     if [ -z "$pkg" ]; then
-        pkg=$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity' | head -n 1 | sed -n 's/.*\([a-zA-Z0-9_.]*\)\/\([a-zA-Z0-9_.]*\).*/\1/p')
+        line=$(dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | head -n 1)
+        if [ -n "$line" ]; then
+            pkg=$(extract_pkg "$line")
+        fi
+    fi
+
+    # Method 4: Ultra-fast top-app cpuset check for target packages (fallback if dumpsys is restricted)
+    if [ -z "$pkg" ]; then
+        for target in $TARGET_PACKAGES; do
+            local tpid
+            tpid=$(pidof "$target" 2>/dev/null | awk '{print $1}')
+            if [ -n "$tpid" ]; then
+                if grep -qw "$tpid" /dev/cpuset/top-app/tasks 2>/dev/null || grep -qw "$tpid" /sys/fs/cgroup/top-app/cgroup.procs 2>/dev/null; then
+                    pkg="$target"
+                    break
+                fi
+            fi
+        done
     fi
 
     echo "$pkg"
+}
+
+# Hardware telemetry helpers for live monitoring
+get_cpu_telemetry() {
+    local gov="unknown"
+    local freqs=""
+    
+    if [ -f "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor" ]; then
+        gov=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null)
+    elif [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
+        gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)
+    fi
+
+    for pol in /sys/devices/system/cpu/cpufreq/policy*; do
+        if [ -d "$pol" ]; then
+            local cf
+            cf=$(cat "$pol/scaling_cur_freq" 2>/dev/null || echo 0)
+            if [ "$cf" -gt 0 ]; then
+                local mhz=$((cf / 1000))
+                if [ -z "$freqs" ]; then
+                    freqs="${mhz}MHz"
+                else
+                    freqs="${freqs}/${mhz}MHz"
+                fi
+            fi
+        fi
+    done
+    
+    [ -z "$freqs" ] && freqs="N/A"
+    echo "$gov|$freqs"
+}
+
+get_gpu_telemetry() {
+    local ggov="unknown"
+    local gfreq="N/A"
+    
+    if [ "$ARCH_TYPE" = "QUALCOMM" ]; then
+        if [ -f "/sys/class/kgsl/kgsl-3d0/devfreq/governor" ]; then
+            ggov=$(cat /sys/class/kgsl/kgsl-3d0/devfreq/governor 2>/dev/null)
+        fi
+        local q_freq=0
+        if [ -f "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq" ]; then
+            q_freq=$(cat /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq 2>/dev/null || echo 0)
+        elif [ -f "/sys/class/kgsl/kgsl-3d0/gpuclk" ]; then
+            q_freq=$(cat /sys/class/kgsl/kgsl-3d0/gpuclk 2>/dev/null || echo 0)
+        fi
+        if [ "$q_freq" -gt 1000000 ]; then
+            gfreq="$((q_freq / 1000000))MHz"
+        elif [ "$q_freq" -gt 1000 ]; then
+            gfreq="$((q_freq / 1000))MHz"
+        elif [ "$q_freq" -gt 0 ]; then
+            gfreq="${q_freq}MHz"
+        fi
+    elif [ "$ARCH_TYPE" = "MEDIATEK" ]; then
+        for mtk_gov in /sys/class/misc/mali0/device/devfreq/*/governor; do
+            if [ -f "$mtk_gov" ]; then
+                ggov=$(cat "$mtk_gov" 2>/dev/null)
+                break
+            fi
+        done
+        for mtk_f in /sys/class/misc/mali0/device/devfreq/*/cur_freq; do
+            if [ -f "$mtk_f" ]; then
+                local m_freq
+                m_freq=$(cat "$mtk_f" 2>/dev/null || echo 0)
+                if [ "$m_freq" -gt 1000000 ]; then
+                    gfreq="$((m_freq / 1000000))MHz"
+                elif [ "$m_freq" -gt 1000 ]; then
+                    gfreq="$((m_freq / 1000))MHz"
+                fi
+                break
+            fi
+        done
+    fi
+
+    echo "$ggov|$gfreq"
+}
+
+# Real-time snapshot writer (Atomic overwrite every 3s tick)
+write_live_status_snapshot() {
+    local state="$1"
+    local focused="$2"
+    local bat="$3"
+    local soc="$4"
+    local cond="$5"
+    local cpu_info="$6"
+    local gpu_info="$7"
+    local now
+    now="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo '0000-00-00 00:00:00')"
+    
+    local c_gov="${cpu_info%%|*}"
+    local c_freq="${cpu_info##*|}"
+    local g_gov="${gpu_info%%|*}"
+    local g_freq="${gpu_info##*|}"
+    
+    local status_tmp="$USER_STATUS_FILE.tmp"
+    {
+        echo "========================================================"
+        echo "           AeroPace Live Monitor Snapshot               "
+        echo "========================================================"
+        echo "Timestamp    : $now"
+        echo "Daemon State : $state"
+        echo "Focused App  : ${focused:-[Desktop/System]}"
+        if [ "$state" = "GAMING" ]; then
+            echo "Active Game  : $ACTIVE_GAME_PACKAGE (PID: ${ACTIVE_GAME_PID:-N/A})"
+            echo "LMK Shield   : oom_score_adj = $(cat /proc/$ACTIVE_GAME_PID/oom_score_adj 2>/dev/null || echo '-1000')"
+        fi
+        echo "Thermal Cond : $cond"
+        echo "Battery Temp : ${bat}°C"
+        echo "SoC Temp     : ${soc}°C"
+        echo "CPU Governor : $c_gov"
+        echo "CPU Clocks   : $c_freq"
+        echo "GPU Governor : $g_gov"
+        echo "GPU Clock    : $g_freq"
+        echo "========================================================"
+    } > "$status_tmp" 2>/dev/null
+    
+    if [ -f "$status_tmp" ]; then
+        mv "$status_tmp" "$USER_STATUS_FILE" 2>/dev/null
+    fi
 }
 
 # Function to read peak thermal temperatures
@@ -465,8 +625,13 @@ revert_to_idle() {
 log_info "AeroPace dynamic monitor loop active."
 
 LOOP_TICK=0
+HEARTBEAT_TICK=0
+LAST_FOCUSED_PKG=""
+
 while true; do
     LOOP_TICK=$((LOOP_TICK + 1))
+    HEARTBEAT_TICK=$((HEARTBEAT_TICK + 1))
+
     # Hourly periodic check (1200 ticks * 3 seconds = 3600s = 1 hour)
     if [ "$LOOP_TICK" -ge 1200 ]; then
         check_and_purge_logs
@@ -475,6 +640,33 @@ while true; do
 
     FOCUSED_PKG=$(get_focused_package)
     
+    # Read thermal status
+    THERMAL_STATE=$(check_thermal_status)
+    THERMAL_COND=$(echo "$THERMAL_STATE" | awk '{print $1}')
+    BAT_T=$(echo "$THERMAL_STATE" | awk '{print $2}')
+    SOC_T=$(echo "$THERMAL_STATE" | awk '{print $3}')
+    HOT_ZONE=$(echo "$THERMAL_STATE" | awk '{print $4}')
+    HOT_TYPE=$(echo "$THERMAL_STATE" | awk '{print $5}')
+
+    # Read hardware telemetry
+    CPU_INFO=$(get_cpu_telemetry)
+    GPU_INFO=$(get_gpu_telemetry)
+    C_GOV="${CPU_INFO%%|*}"
+    C_FREQ="${CPU_INFO##*|}"
+    G_GOV="${GPU_INFO%%|*}"
+    G_FREQ="${GPU_INFO##*|}"
+
+    # Log immediately when focused window switches
+    if [ -n "$FOCUSED_PKG" ] && [ "$FOCUSED_PKG" != "$LAST_FOCUSED_PKG" ]; then
+        if [ -n "$LAST_FOCUSED_PKG" ]; then
+            log_info "Foreground window switched: $LAST_FOCUSED_PKG -> $FOCUSED_PKG"
+        else
+            log_info "Foreground window detected: $FOCUSED_PKG"
+        fi
+        LAST_FOCUSED_PKG="$FOCUSED_PKG"
+        HEARTBEAT_TICK=0
+    fi
+
     # Determine if focused package is one of the target competitive games
     GAME_FOUND=""
     for target in $TARGET_PACKAGES; do
@@ -489,6 +681,7 @@ while true; do
         if [ "$CURRENT_STATE" != "GAMING" ]; then
             ACTIVE_GAME_PACKAGE="$GAME_FOUND"
             apply_game_boost "$GAME_FOUND"
+            HEARTBEAT_TICK=0
         else
             # Ensure game PID is tracked and protected against LMK if PID changed (e.g. game relaunch)
             CURRENT_PID=$(pidof "$GAME_FOUND" 2>/dev/null | awk '{print $1}')
@@ -501,13 +694,6 @@ while true; do
             fi
             
             # Active Thermal Watchdog: Protect hardware and prevent throttling cliff-drops
-            THERMAL_STATE=$(check_thermal_status)
-            THERMAL_COND=$(echo "$THERMAL_STATE" | awk '{print $1}')
-            BAT_T=$(echo "$THERMAL_STATE" | awk '{print $2}')
-            SOC_T=$(echo "$THERMAL_STATE" | awk '{print $3}')
-            HOT_ZONE=$(echo "$THERMAL_STATE" | awk '{print $4}')
-            HOT_TYPE=$(echo "$THERMAL_STATE" | awk '{print $5}')
-            
             if [ "$THERMAL_COND" = "HOT" ] && [ "$THERMAL_THROTTLED" -eq 0 ]; then
                 log_warn "THERMAL GUARD: Safety limit reached on ${HOT_ZONE:-zone} (${HOT_TYPE:-soc}, SoC: ${SOC_T}°C, Bat: ${BAT_T}°C). Scaling CPU governors down to schedutil..."
                 set_cpu_governors "schedutil"
@@ -517,13 +703,29 @@ while true; do
                 set_cpu_governors "performance"
                 THERMAL_THROTTLED=0
             fi
+
+            # Gaming Heartbeat Log every ~9s (3 ticks)
+            if [ "$HEARTBEAT_TICK" -ge 3 ]; then
+                log_write "MONITOR" "[GAMING] Game: $ACTIVE_GAME_PACKAGE (PID: ${ACTIVE_GAME_PID:-N/A}) | Bat: ${BAT_T}°C | SoC: ${SOC_T}°C (${THERMAL_COND}) | CPU: ${C_GOV} (${C_FREQ}) | GPU: ${G_GOV} (${G_FREQ})"
+                HEARTBEAT_TICK=0
+            fi
         fi
     else
         # Game is not in foreground
         if [ "$CURRENT_STATE" = "GAMING" ]; then
             revert_to_idle
+            HEARTBEAT_TICK=0
+        else
+            # Idle Heartbeat Log every 30s (10 ticks)
+            if [ "$HEARTBEAT_TICK" -ge 10 ]; then
+                log_write "MONITOR" "[IDLE] Focus: ${FOCUSED_PKG:-[Desktop/System]} | Bat: ${BAT_T}°C | SoC: ${SOC_T}°C | CPU: ${C_GOV} (${C_FREQ}) | GPU: ${G_GOV} (${G_FREQ})"
+                HEARTBEAT_TICK=0
+            fi
         fi
     fi
+
+    # Update atomic real-time status snapshot every tick (3 seconds)
+    write_live_status_snapshot "$CURRENT_STATE" "$FOCUSED_PKG" "$BAT_T" "$SOC_T" "$THERMAL_COND" "$CPU_INFO" "$GPU_INFO"
     
     sleep 3
 done
